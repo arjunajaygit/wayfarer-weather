@@ -1215,7 +1215,14 @@ export default function App() {
             ) : (
               <div style={{display:'flex',flexDirection:'column',gap:2}}>
                 {history.map(item => (
-                  <div className="history-item" key={item.id}>
+                  <div
+                    className="history-item"
+                    key={item.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => editingId !== item.id && handleSearch(item.location_query, item.latitude, item.longitude)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && editingId !== item.id) handleSearch(item.location_query, item.latitude, item.longitude) }}
+                  >
                     {editingId === item.id ? (
                       <div style={{display:'flex',gap:8,flex:1,alignItems:'center'}}>
                         <input value={editName} onChange={e => setEditName(e.target.value)} autoFocus onKeyDown={e => e.key === 'Enter' && saveEdit(item.id)} className="edit-input" style={{ background: '#ffffff', color: '#1a2a3a' }} />
@@ -1223,7 +1230,7 @@ export default function App() {
                       </div>
                     ) : (
                       <>
-                        <div style={{display:'flex',alignItems:'center',gap:10,flex:1, cursor: 'pointer'}} onClick={() => handleSearch(item.location_query, item.latitude, item.longitude)}>
+                        <div style={{display:'flex',alignItems:'center',gap:10,flex:1}}>
                           <div style={{width:32,height:32,borderRadius:10,background:'#f0f6ff',display:'flex',alignItems:'center',justifyContent:'center'}}>
                             <WeatherIcon condition={item.condition || 'sunny'} iconCode={item.icon || '01d'} size={18}/>
                           </div>
