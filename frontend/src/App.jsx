@@ -665,8 +665,8 @@ export default function App() {
               padding: 36px 24px 72px;
               border-radius: 28px 28px 0 0;
               margin-top: -24px;
+              overflow: hidden; /* <-- This forces the 4px bar to stay perfectly inside the curve */
             }
-            .ww-right::before { border-radius: 28px 28px 0 0; }
             .ww-form-title { font-size: 26px; }
             .ww-form-footer { left: 24px; right: 24px; }
           }
@@ -869,14 +869,49 @@ export default function App() {
         .badge-btn:hover { background: #deeaf9; }
         @keyframes floatIcon { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-6px); } }
         .fade-in { animation: fadeIn 0.4s ease forwards; }
+        
+        /* New class for the map/video section so it can respond to screen size */
+        .media-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 10px; }
+
+        /* TABLET VIEW */
         @media (max-width: 900px) {
           .app-shell { flex-direction: column; padding: 16px; height: auto; overflow: visible; }
-          .left-panel { width: 100%; min-height: 220px; flex-direction: row; align-items: center; gap: 16px; }
-          .big-temp { font-size: 54px; }
-          .details-grid { grid-template-columns: repeat(2, 1fr); }
+          .left-panel { width: 100%; min-height: auto; flex-direction: row; justify-content: space-between; align-items: center; padding: 24px; gap: 20px; }
+          .panel-top-bar { margin-bottom: 0; }
           .right-panel { overflow-y: visible; padding-right: 0; }
+          .media-grid { grid-template-columns: 1fr; } /* Stack Map and Video on tablet */
         }
-        @media (max-width: 600px) { .details-grid { grid-template-columns: 1fr 1fr; } .left-panel { flex-direction: column; } }
+
+        /* MOBILE VIEW */
+        @media (max-width: 600px) {
+          .app-shell { padding: 12px; background: #e8f1fb; }
+          
+          /* Transform Left Panel into a cohesive top banner */
+          .left-panel { flex-direction: column; text-align: center; border-radius: 24px; padding: 20px 16px; gap: 12px; }
+          .panel-top-bar { width: 100%; }
+          .loc-row { align-items: center; flex-direction: column; width: 100%; margin-bottom: 8px; }
+          .sun-times { justify-content: center; width: 100%; }
+          .big-temp { font-size: 64px; margin: 10px 0; }
+          
+          /* Search Bar Adapts */
+          .search-bar { flex-wrap: wrap; padding: 8px 12px; border-radius: 12px; }
+          .search-input { width: 100%; font-size: 16px; /* 16px prevents iOS auto-zoom */ }
+          .search-btn { width: 100%; justify-content: center; margin-top: 4px; padding: 12px; }
+
+          /* Unified Grid shrinks padding to fit nicely */
+          .details-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+          .detail-card { padding: 14px 12px; border-radius: 16px; }
+          .detail-val { font-size: 18px; }
+          .detail-icon { width: 24px; height: 24px; font-size: 12px; }
+          
+          /* Make AI card span full width on tiny screens */
+          .detail-card:last-child { grid-column: span 2; }
+          
+          /* Timeline fixes */
+          .hourly-card { padding: 16px 14px; border-radius: 16px; }
+          .card-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+          .card-header > div { width: 100%; display: flex; justify-content: space-between; }
+        }
       `}</style>
 
       <div className="app-shell">
@@ -1167,7 +1202,7 @@ export default function App() {
 
           {/* Multi-Resource Geo and Media Platform Embed Layout */}
           {currentWeather && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '10px' }}>
+            <div className="media-grid">
               <div className="detail-card" style={{ padding: 0, overflow: 'hidden', height: '100%', minHeight: '320px' }}>
                 <iframe width="100%" height="100%" frameBorder="0" style={{ border: 0, display: 'block' }} src={`https://maps.google.com/maps?q=${currentWeather.latitude},${currentWeather.longitude}&z=12&output=embed`} allowFullScreen></iframe>
               </div>
