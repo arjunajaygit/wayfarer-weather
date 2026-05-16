@@ -204,26 +204,34 @@ def export_searches_csv(db: Session = Depends(database.get_db)):
 # --- NEW ROUTE: Fetch YouTube Travel Videos ---
 @app.get("/videos/{location}")
 def get_videos(location: str):
-    # Prefer API keys from environment for security
-    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "YOUR_GOOGLE_API_KEY")
-    
-    # We append "travel vlog" to the query so we get cool cinematic videos instead of news reports
-    search_query = f"{location} travel vlog 4k"
-    url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&q={search_query}&type=video&maxResults=2&key={GOOGLE_API_KEY}"
-    
-    response = requests.get(url)
-    if response.status_code == 200:
+    try:
+        # Prefer API keys from environment for security
+        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "YOUR_GOOGLE_API_KEY")
+
+        # We append "travel vlog" to the query so we get cinematic videos instead of news reports
+        search_query = f"{location} travel vlog 4k"
+        url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&q={search_query}&type=video&maxResults=2&key={GOOGLE_API_KEY}"
+
+        response = requests.get(url, timeout=6)
+        response.raise_for_status()
         data = response.json()
         videos = []
         for item in data.get("items", []):
+            # Defensive access in case structure varies
+            vid = item.get("id", {}).get("videoId")
+            snip = item.get("snippet", {})
+            if not vid:
+                continue
             videos.append({
-                "id": item["id"]["videoId"],
-                "title": item["snippet"]["title"],
-                "channel": item["snippet"]["channelTitle"]
+                "id": vid,
+                "title": snip.get("title", ""),
+                "channel": snip.get("channelTitle", "")
             })
         return videos
-    else:
-        print("YOUTUBE API ERROR:", response.json())
+    except Exception as e:
+        # If we hit the quota limit or any network error, catch it and log
+        print(f"YOUTUBE API ERROR: {e}")
+        # Return an empty list so the React frontend doesn't crash
         return []
 
 # 2. Update the POST route to use the Pydantic model
@@ -411,10 +419,11 @@ def create_search(search: WeatherRequest, db: Session = Depends(database.get_db)
     return new_search
 
 
-# --- READ: Get all saved searches ---
+# --- READ: Get saved searches for a specific user ---
 @app.get("/searches/")
-def get_all_searches(db: Session = Depends(database.get_db)):
-    searches = db.query(models.WeatherSearch).order_by(desc(models.WeatherSearch.search_date)).all()
+def read_searches(user_id: str, db: Session = Depends(database.get_db)):
+    # Require user_id from frontend and only return that user's rows
+    searches = db.query(models.WeatherSearch).filter(models.WeatherSearch.user_id == user_id).order_by(models.WeatherSearch.id.desc()).all()
     return searches
 
 
