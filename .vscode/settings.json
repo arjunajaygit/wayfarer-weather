@@ -1,0 +1,5 @@
+{
+  "python.defaultInterpreterPath": "./backend/venv/bin/python", 
+  "css.lint.unknownAtRules": "ignore",
+  "tailwindCSS.experimental.configFile": "frontend/tailwind.config.js"
+}
