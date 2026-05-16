@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { supabase } from './supabaseClient';
 
-const API_URL = 'http://127.0.0.1:8000';
+const API_URL = 'https://wayfarer-weather.onrender.com';
 
 // --- VISUAL UTILITIES FROM YOUR APP ---
 function WeatherIcon({ condition, iconCode, size = 48, animated = false }) {
