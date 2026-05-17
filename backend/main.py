@@ -419,11 +419,10 @@ def create_search(search: WeatherRequest, db: Session = Depends(database.get_db)
     return new_search
 
 
-# --- READ: Get saved searches for a specific user ---
+# --- READ: Get all saved searches ---
 @app.get("/searches/")
-def read_searches(user_id: str, db: Session = Depends(database.get_db)):
-    # Require user_id from frontend and only return that user's rows
-    searches = db.query(models.WeatherSearch).filter(models.WeatherSearch.user_id == user_id).order_by(models.WeatherSearch.id.desc()).all()
+def read_searches(db: Session = Depends(database.get_db)):
+    searches = db.query(models.WeatherSearch).order_by(models.WeatherSearch.id.desc()).all()
     return searches
 
 

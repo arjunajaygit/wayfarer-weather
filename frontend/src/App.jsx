@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { supabase } from './supabaseClient';
 
 const API_URL = 'https://wayfarer-weather.onrender.com';
 
@@ -81,17 +80,27 @@ function getSkyGradient(condition, iconCode) {
   return 'linear-gradient(160deg, #2979c8 0%, #5ba8f5 100%)';
 }
 
+// Upgraded: Uses exact OpenWeather icon codes instead of broad text descriptions
 function MiniIcon({ condition, iconCode, size = 20 }) {
-  const c = (condition || '').toLowerCase();
+  const code = (iconCode || '').slice(0, 2); // Extracts the '01', '02', '10', etc.
   const isNight = iconCode?.endsWith('n');
-  if (c.includes('rain')) return <span style={{fontSize:size, lineHeight:1}}>🌧</span>
-  if (c.includes('storm')) return <span style={{fontSize:size, lineHeight:1}}>⛈</span>
-  if (c.includes('snow')) return <span style={{fontSize:size, lineHeight:1}}>❄️</span>
-  if (c.includes('cloud')) return <span style={{fontSize:size, lineHeight:1}}>☁️</span>
-  if (c.includes('fog') || c.includes('mist')) return <span style={{fontSize:size, lineHeight:1}}>🌫</span>
-  if (isNight) return <span style={{fontSize:size, lineHeight:1}}>🌙</span>
-  if (c.includes('partly')) return <span style={{fontSize:size, lineHeight:1}}>⛅</span>
-  return <span style={{fontSize:size, lineHeight:1}}>☀️</span>
+
+  // Exact OpenWeatherMap Icon Code Mapping
+  if (code === '01') return <span style={{fontSize:size, lineHeight:1}}>{isNight ? '🌙' : '☀️'}</span>; // Clear sky
+  if (code === '02' || code === '03') return <span style={{fontSize:size, lineHeight:1}}>{isNight ? '☁️' : '⛅'}</span>; // Few / Scattered clouds
+  if (code === '04') return <span style={{fontSize:size, lineHeight:1}}>☁️</span>; // Broken / Overcast clouds
+  if (code === '09' || code === '10') return <span style={{fontSize:size, lineHeight:1}}>🌧</span>; // Rain
+  if (code === '11') return <span style={{fontSize:size, lineHeight:1}}>⛈</span>; // Thunderstorm
+  if (code === '13') return <span style={{fontSize:size, lineHeight:1}}>❄️</span>; // Snow
+  if (code === '50') return <span style={{fontSize:size, lineHeight:1}}>🌫</span>; // Mist / Fog
+
+  // Ultimate Fallback just in case
+  const c = (condition || '').toLowerCase();
+  if (c.includes('rain')) return <span style={{fontSize:size, lineHeight:1}}>🌧</span>;
+  if (c.includes('storm')) return <span style={{fontSize:size, lineHeight:1}}>⛈</span>;
+  if (c.includes('cloud')) return <span style={{fontSize:size, lineHeight:1}}>☁️</span>;
+  
+  return <span style={{fontSize:size, lineHeight:1}}>{isNight ? '🌙' : '☀️'}</span>;
 }
 
 // Fixed algorithm handling lat/lon explicitly
@@ -144,14 +153,6 @@ function generateSmartInsight(weather, uv, rainChance) {
 
 // --- MAIN APPLICATION CORE ---
 export default function App() {
-  // Auth State
-  const [user, setUser] = useState(null);
-  const [authMode, setAuthMode] = useState('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [authLoading, setAuthLoading] = useState(false);
-
   // Dashboard Application State
   const [location, setLocation] = useState('')
   const [currentWeather, setCurrentWeather] = useState(null)
@@ -168,20 +169,9 @@ export default function App() {
   const [chartMetric, setChartMetric] = useState('temp') // 'temp' or 'precip'
   const [aiInsight, setAiInsight] = useState('Waiting for localized atmospheric data...')
 
-  // Watch security validation session
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-    return () => subscription.unsubscribe();
+    fetchHistory();
   }, []);
-
-  useEffect(() => {
-    if (user) { fetchHistory(); }
-  }, [user]);
 
   // Query location text recommendations loop
   useEffect(() => {
@@ -202,37 +192,10 @@ export default function App() {
     return () => clearTimeout(delayDebounceFn);
   }, [location])
 
-  // --- IDENTITY & SECURITY ROUTINES ---
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    setAuthLoading(true);
-    try {
-      if (authMode === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        if (data?.user) setUser(data.user);
-      }
-    } catch (err) {
-      setAuthError(err.message);
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setCurrentWeather(null);
-    setHistory([]);
-  };
-
   // --- METEOROLOGICAL WORKFLOWS ---
   const fetchHistory = async () => {
     try {
-      const res = await axios.get(`${API_URL}/searches/?user_id=${user.id}`)
+      const res = await axios.get(`${API_URL}/searches/`)
       setHistory(res.data)
     } catch { console.error('Failed to fetch history') }
   }
@@ -243,7 +206,7 @@ export default function App() {
     setError('');
     setShowSuggestions(false);
     try {
-      const payload = { location: searchTarget, user_id: user.id };
+      const payload = { location: searchTarget };
       if (lat !== null && lon !== null) {
         payload.lat = lat;
         payload.lon = lon;
@@ -378,412 +341,6 @@ export default function App() {
   const sunset = currentWeather?.sunset || '--:--'
 
   // ─────────────────────────────────────────────────────────────────────────
-  // NEW RESPONSIVE AUTH SCREEN (login / signup)
-  // ─────────────────────────────────────────────────────────────────────────
-  if (!user) {
-    return (
-      <>
-        <style>{`
-          @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');
-
-          *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-          .ww-auth-root {
-            min-height: 100vh;
-            width: 100%;
-            display: flex;
-            font-family: 'Sora', system-ui, sans-serif;
-            background: #0b1220;
-            overflow-x: hidden;
-          }
-
-          /* ── LEFT PANEL ── */
-          .ww-left {
-            flex: 1.15;
-            min-height: 100vh;
-            background: linear-gradient(145deg, #0b1220 0%, #112240 55%, #0d3060 100%);
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 52px 60px;
-            position: relative;
-            overflow: hidden;
-          }
-          .ww-left::before {
-            content: '';
-            position: absolute;
-            width: 520px; height: 520px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(41,121,200,0.22) 0%, transparent 70%);
-            top: -120px; left: -100px;
-            pointer-events: none;
-          }
-          .ww-left::after {
-            content: '';
-            position: absolute;
-            width: 380px; height: 380px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(91,168,245,0.14) 0%, transparent 70%);
-            bottom: 60px; right: -60px;
-            pointer-events: none;
-          }
-
-          .ww-left-inner { position: relative; z-index: 1; }
-
-          .ww-logo-mark {
-            display: flex; align-items: center; gap: 10px;
-            font-size: 15px; font-weight: 600;
-            color: rgba(255,255,255,0.5);
-            letter-spacing: 0.3px;
-          }
-          .ww-logo-dot {
-            width: 8px; height: 8px; border-radius: 50%;
-            background: #5ba8f5;
-            box-shadow: 0 0 10px rgba(91,168,245,0.8);
-          }
-
-          .ww-headline {
-            font-size: clamp(34px, 4vw, 56px);
-            font-weight: 800;
-            color: #ffffff;
-            line-height: 1.08;
-            letter-spacing: -1.5px;
-            margin-top: 52px;
-            max-width: 480px;
-          }
-          .ww-headline .hl-accent {
-            background: linear-gradient(90deg, #5ba8f5 0%, #a8d8ff 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-          }
-
-          .ww-sub {
-            font-size: 15px;
-            color: rgba(255,255,255,0.42);
-            margin-top: 18px;
-            max-width: 360px;
-            line-height: 1.75;
-            font-weight: 400;
-          }
-
-          .ww-pills {
-            display: flex; flex-wrap: wrap; gap: 10px;
-            margin-top: 38px;
-          }
-          .ww-pill {
-            display: inline-flex; align-items: center; gap: 7px;
-            padding: 7px 15px;
-            border-radius: 100px;
-            background: rgba(91,168,245,0.1);
-            border: 1px solid rgba(91,168,245,0.2);
-            color: rgba(255,255,255,0.6);
-            font-size: 13px; font-weight: 500;
-          }
-          .ww-pill-dot { width: 5px; height: 5px; border-radius: 50%; background: #5ba8f5; }
-
-          .ww-left-footer {
-            position: relative; z-index: 1;
-            font-size: 12px;
-            color: rgba(255,255,255,0.18);
-          }
-
-          /* ── RIGHT PANEL ── */
-          .ww-right {
-            width: min(520px, 100%);
-            min-height: 100vh;
-            background: #ffffff;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            padding: 64px 56px;
-            position: relative;
-            flex-shrink: 0;
-          }
-          /* Blue accent bar at top */
-          .ww-right::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #2979c8, #5ba8f5, #a8d8ff);
-          }
-
-          .ww-eyebrow {
-            font-size: 11px; font-weight: 700;
-            letter-spacing: 1.6px; text-transform: uppercase;
-            color: #5ba8f5;
-            margin-bottom: 12px;
-          }
-          .ww-form-title {
-            font-size: clamp(24px, 2.8vw, 34px);
-            font-weight: 800;
-            color: #0b1220;
-            letter-spacing: -0.7px;
-            line-height: 1.15;
-          }
-          .ww-form-desc {
-            font-size: 14px;
-            color: #7a90a8;
-            margin-top: 8px;
-            margin-bottom: 34px;
-            font-weight: 400;
-            line-height: 1.6;
-          }
-
-          .ww-field { margin-bottom: 18px; }
-          .ww-label {
-            display: block;
-            font-size: 13px; font-weight: 600;
-            color: #0b1220;
-            margin-bottom: 8px;
-          }
-          .ww-input-wrap { position: relative; }
-          .ww-input-icon {
-            position: absolute;
-            left: 15px; top: 50%;
-            transform: translateY(-50%);
-            font-size: 15px;
-            pointer-events: none;
-            opacity: 0.4;
-          }
-          .ww-input {
-            width: 100%;
-            padding: 13px 16px 13px 42px;
-            border: 1.5px solid #e2eaf3;
-            border-radius: 13px;
-            font-size: 15px;
-            font-family: 'Sora', system-ui, sans-serif;
-            outline: none;
-            color: #0b1220;
-            background: #f7faff;
-            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
-            -webkit-appearance: none;
-            appearance: none;
-          }
-          .ww-input:focus {
-            border-color: #2979c8;
-            box-shadow: 0 0 0 4px rgba(41,121,200,0.1);
-            background: #ffffff;
-          }
-          .ww-input::placeholder { color: #b8cad8; }
-
-          .ww-forgot {
-            display: block; text-align: right;
-            font-size: 12px; color: #5ba8f5; font-weight: 500;
-            text-decoration: none; margin-top: 7px;
-            transition: color 0.15s;
-          }
-          .ww-forgot:hover { color: #2979c8; }
-
-          .ww-error {
-            display: flex; align-items: flex-start; gap: 8px;
-            background: #fff5f5; border: 1px solid #fecaca;
-            border-radius: 10px; padding: 11px 14px;
-            font-size: 13px; color: #c0392b;
-            margin-bottom: 16px; line-height: 1.5;
-          }
-
-          .ww-btn {
-            width: 100%; padding: 15px;
-            background: #0b1220;
-            border: none; border-radius: 13px;
-            color: #ffffff;
-            font-size: 15px; font-weight: 700;
-            font-family: 'Sora', system-ui, sans-serif;
-            cursor: pointer; letter-spacing: 0.1px;
-            transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
-            display: flex; align-items: center; justify-content: center; gap: 8px;
-            margin-top: 4px;
-            -webkit-appearance: none;
-          }
-          .ww-btn:hover { background: #182840; box-shadow: 0 8px 24px rgba(11,18,32,0.18); }
-          .ww-btn:active { transform: scale(0.985); }
-          .ww-btn:disabled { background: #a0b4c8; cursor: not-allowed; box-shadow: none; }
-
-          @keyframes ww-spin { to { transform: rotate(360deg); } }
-          .ww-spin {
-            width: 16px; height: 16px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: ww-spin 0.65s linear infinite;
-          }
-
-          .ww-divider {
-            display: flex; align-items: center; gap: 14px;
-            margin: 26px 0 0;
-          }
-          .ww-divider::before, .ww-divider::after { content: ''; flex: 1; height: 1px; background: #edf2f7; }
-          .ww-divider span { font-size: 12px; color: #c0cdd8; white-space: nowrap; }
-
-          .ww-switch-row {
-            text-align: center; font-size: 14px;
-            color: #7a90a8; margin-top: 22px; font-weight: 400;
-          }
-          .ww-switch-btn {
-            background: none; border: none;
-            color: #2979c8; font-weight: 700;
-            cursor: pointer;
-            font-family: 'Sora', system-ui, sans-serif;
-            font-size: 14px; padding: 0;
-            transition: color 0.15s;
-          }
-          .ww-switch-btn:hover { color: #0b1220; }
-
-          .ww-form-footer {
-            position: absolute;
-            bottom: 24px; left: 56px; right: 56px;
-            display: flex; justify-content: space-between; align-items: center;
-            font-size: 12px; color: #c0cdd8;
-          }
-
-          /* ─── RESPONSIVE ─── */
-          @media (max-width: 1024px) and (min-width: 641px) {
-            .ww-left { padding: 44px; flex: 1; }
-            .ww-right { width: min(440px, 100%); padding: 52px 44px; }
-            .ww-headline { margin-top: 36px; }
-          }
-          @media (max-width: 640px) {
-            .ww-auth-root { flex-direction: column; min-height: 100vh; }
-            .ww-left {
-              min-height: auto;
-              padding: 36px 24px 44px;
-              flex: none;
-            }
-            .ww-left::before { width: 280px; height: 280px; top: -80px; left: -60px; }
-            .ww-left::after { display: none; }
-            .ww-headline { font-size: 30px; margin-top: 28px; letter-spacing: -0.8px; }
-            .ww-sub { font-size: 14px; margin-top: 12px; }
-            .ww-pills { margin-top: 22px; gap: 8px; }
-            .ww-pill { font-size: 12px; padding: 6px 12px; }
-            .ww-left-footer { display: none; }
-            .ww-right {
-              width: 100%;
-              min-height: auto;
-              flex: 1;
-              padding: 36px 24px 72px;
-              border-radius: 28px 28px 0 0;
-              margin-top: -24px;
-              overflow: hidden; /* <-- This forces the 4px bar to stay perfectly inside the curve */
-            }
-            .ww-form-title { font-size: 26px; }
-            .ww-form-footer { left: 24px; right: 24px; }
-          }
-          @media (max-width: 380px) {
-            .ww-left { padding: 28px 18px 36px; }
-            .ww-right { padding: 28px 18px 64px; }
-            .ww-headline { font-size: 26px; }
-          }
-        `}</style>
-
-        <div className="ww-auth-root">
-          <div className="ww-left">
-            <div className="ww-left-inner">
-              <div className="ww-logo-mark">
-                <div className="ww-logo-dot" />
-                Wayfarer Weather
-              </div>
-              <h1 className="ww-headline">
-                Your travel<br/>
-                <span className="hl-accent">weather</span><br/>
-                companion.
-              </h1>
-              <p className="ww-sub">
-                Real-time forecasts, air quality, UV index and city exploration — all in one beautiful dashboard.
-              </p>
-              <div className="ww-pills">
-                {[
-                  ['🌡', 'Live weather'],
-                  ['📅', '5-day forecast'],
-                  ['🌬', 'Wind & AQI'],
-                  ['📍', 'Any city'],
-                  ['🎥', 'City explorer'],
-                ].map(([icon, label]) => (
-                  <span className="ww-pill" key={label}>
-                    {icon}
-                    <span className="ww-pill-dot" />
-                    {label}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="ww-left-footer">© 2026 Wayfarer Weather Inc.</div>
-          </div>
-          <div className="ww-right">
-            <p className="ww-eyebrow">
-              {authMode === 'login' ? '— Welcome back' : '— Get started'}
-            </p>
-            <h2 className="ww-form-title">
-              {authMode === 'login' ? 'Sign in to your account' : 'Create your free account'}
-            </h2>
-            <p className="ww-form-desc">
-              {authMode === 'login'
-                ? 'Enter your credentials to continue to your dashboard.'
-                : 'Start tracking weather for any city worldwide.'}
-            </p>
-            <form onSubmit={handleAuth} noValidate>
-              <div className="ww-field">
-                <label className="ww-label" htmlFor="ww-email">Email address</label>
-                <div className="ww-input-wrap">
-                  <span className="ww-input-icon">✉️</span>
-                  <input
-                    id="ww-email"
-                    type="email"
-                    className="ww-input"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    required
-                    autoComplete="email"
-                  />
-                </div>
-              </div>
-              <div className="ww-field">
-                <label className="ww-label" htmlFor="ww-password">Password</label>
-                <div className="ww-input-wrap">
-                  <span className="ww-input-icon">🔒</span>
-                  <input
-                    id="ww-password"
-                    type="password"
-                    className="ww-input"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    required
-                    autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
-                  />
-                </div>
-                {authMode === 'login' && (
-                  <a href="#forgot" className="ww-forgot">Forgot password?</a>
-                )}
-              </div>
-              {authError && (
-                <div className="ww-error">
-                  <span>⚠️</span>
-                  <span>{authError}</span>
-                </div>
-              )}
-              <button type="submit" className="ww-btn" disabled={authLoading}>
-                {authLoading
-                  ? <><div className="ww-spin" /> Please wait…</>
-                  : authMode === 'login' ? 'Sign in →' : 'Create account →'
-                }
-              </button>
-            </form>
-            <div className="ww-divider"><span>or</span></div>
-            <div className="ww-switch-row">
-              {authMode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-              <button
-                className="ww-switch-btn"
-                onClick={() => { setAuthMode(authMode === 'login' ? 'signup' : 'login'); setAuthError(''); }}
-              >
-                {authMode === 'login' ? 'Sign up free' : 'Sign in'}
-              </button>
-            </div>
-            <div className="ww-form-footer">
-              <span>🧭 Wayfarer Weather</span>
-              <span>© 2026</span>
             </div>
           </div>
         </div>
@@ -918,7 +475,6 @@ export default function App() {
         {/* LEFT PANEL */}
         <div className="left-panel" style={{ background: skyGrad }}>
           <div className="panel-top-bar">
-            <button onClick={handleLogout} className="badge-btn" style={{background:'rgba(255,255,255,0.2)', color:'white'}}>🚪 Logout</button>
           </div>
 
           <div className="loc-row">
